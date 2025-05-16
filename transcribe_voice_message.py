@@ -211,12 +211,26 @@ def main(audio_file: str, output_file: str | None = None):
 
         if translated_transcript is not None:
             f.write("\n\n---\n\n## Translated Transcript\n\n")
+            f.write(
+                "<details>\n<summary>Click to see the translated transcript</summary>\n"
+            )
             f.write(translated_transcript)
-            f.write(f"\n\n---\n\n## Original transcript in {detected_language}\n\n")
+
+            f.write("\n\n</details>\n\n")
+            # Write the original transcript in the detected language
+            f.write("\n\n---\n\n## Original transcript\n\n")
+            f.write(
+                f"<details>\n<summary>Click to see the original transcript in {detected_language.capitalize()}</summary>\n\n"
+            )
             f.write(first_transcript)
+            f.write("\n\n</details>\n\n")
         else:
             f.write("\n\n---\n\n## Original transcript\n\n")
+            f.write(
+                "<details>\n<summary>Click to see the original transcript</summary>\n\n"
+            )
             f.write(first_transcript)
+            f.write("\n\n</details>\n\n")
 
     print(f"\nTranscript saved to {output_file}")
 
