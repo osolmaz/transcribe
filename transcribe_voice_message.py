@@ -19,12 +19,13 @@ from openai import OpenAI
 
 dotenv.load_dotenv(".env")
 
-PROJECT_ID = os.getenv("PROJECT_ID")
-GEMINI_MODEL = "gemini-2.5-pro-preview-05-06"
-OPENAI_MODEL = "gpt-4.5-preview"
-
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+
+GEMINI_MODEL = "gemini-2.5-pro-preview-05-06"
+OPENAI_MODEL = "gpt-4.5-preview"
+PROJECT_ID = os.getenv("PROJECT_ID")
+
 
 if OPENAI_API_KEY is None or OPENAI_API_KEY == "":
     raise ValueError("OPENAI_API_KEY is not set")
