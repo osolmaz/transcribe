@@ -11,11 +11,11 @@ import argparse
 import mimetypes
 import os
 
+import dotenv
 from google import genai
 from google.genai import types
 from lingua import Language, LanguageDetectorBuilder
 from openai import OpenAI
-import dotenv
 
 dotenv.load_dotenv(".env")
 
