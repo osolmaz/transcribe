@@ -124,14 +124,14 @@ def clean_transcript(transcript: str):
         input=transcript
         + (
             "\n\n---\n\n"
-            "Above is a voice message transcription. "
-            "Restructure it better while keeping "
-            "ALL THE INFORMATION included in there. "
-            "Start with a tl;dr bullet point summary that is not overly long. "
-            "The rest of the document can be any structure that makes sense, "
-            "as long as it's succinct, easy to read and understand. "
-            "Output markdown, and start with a top-level heading. "
-            "Output just the transcript, and no other commentary."
+            "- Above is a voice message transcription.\n"
+            "- Restructure it better while keeping "
+            "- ALL THE INFORMATION included in there.\n"
+            "Start with a tl;dr bullet point summary that is not overly long.\n"
+            "- The rest of the document can be any structure that makes sense, "
+            "as long as it's succinct, easy to read and understand.\n"
+            "- Output markdown, and start with a top-level heading.\n"
+            "- Output just the transcript, and no other commentary."
         ),
     )
 
