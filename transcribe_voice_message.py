@@ -142,8 +142,13 @@ def clean_transcript(transcript: str):
 def main(audio_file: str, output_file: str | None = None):
     # If output_file is not provided, use the same name as the audio file
     if output_file is None:
+        # Get the directory of the audio file
+        directory = os.path.dirname(audio_file)
+        # Get the base filename without extension
         base_name = os.path.basename(audio_file)
-        output_file = os.path.splitext(base_name)[0] + ".md"
+        base_without_ext = os.path.splitext(base_name)[0]
+        # Create output file path in the same directory as source file
+        output_file = os.path.join(directory, base_without_ext + ".md")
 
     try:
         # Detect MIME type from file extension
