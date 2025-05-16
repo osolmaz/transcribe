@@ -6,6 +6,7 @@ Why translate with Gemini 2.5 Pro and do the write-up with GPT-4.5?
 Because IMO Gemini 2.5 Pro transcription is currently SOTA
 and GPT-4.5 is the best model for doing write-ups.
 """
+
 import argparse
 import mimetypes
 import os
@@ -14,6 +15,9 @@ from google import genai
 from google.genai import types
 from lingua import Language, LanguageDetectorBuilder
 from openai import OpenAI
+import dotenv
+
+dotenv.load_dotenv(".env")
 
 PROJECT_ID = os.getenv("PROJECT_ID")
 GEMINI_MODEL = "gemini-2.5-pro-preview-05-06"
