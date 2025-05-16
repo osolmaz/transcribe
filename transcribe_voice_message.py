@@ -48,6 +48,30 @@ def generate_first_transcript(bytes_data: bytes, mime_type: str):
     return ret
 
 
+def translate_transcript_into_english(transcript: str):
+    contents = [
+        types.Content(
+            role="user",
+            parts=[
+                types.Part.from_text(text=transcript),
+                types.Part.from_text(text="Translate this transcript into English."),
+            ],
+        ),
+    ]
+    generate_content_config = types.GenerateContentConfig(
+        response_mime_type="text/plain",
+    )
+    ret = ""
+    for chunk in client.models.generate_content_stream(
+        model=MODEL,
+        contents=contents,
+        config=generate_content_config,
+    ):
+        print(chunk.text, end="")
+        ret += chunk.text
+    return ret
+
+
 def main():
     try:
         # Detect MIME type from file extension
@@ -65,7 +89,16 @@ def main():
     except Exception as e:
         print(f"Error processing file: {e}")
 
+    print("Generating first transcript...")
+
     first_transcript = generate_first_transcript(audio_bytes, mime_type)
+
+    print("\nTranslating transcript into English...")
+
+    english_transcript = translate_transcript_into_english(first_transcript)
+
+    print("English transcript:")
+    print(english_transcript)
 
 
 if __name__ == "__main__":
