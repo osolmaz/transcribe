@@ -1,7 +1,11 @@
-# To run this code you need to install the following dependencies:
-# pip install google-genai
-# pip install lingua-py
+"""
+Takes a voice message and transcribes it into text.
 
+Why translate with Gemini 2.5 Pro and do the write-up with GPT-4.5?
+
+Because IMO Gemini 2.5 Pro transcription is currently SOTA
+and GPT-4.5 is the best model for doing write-ups.
+"""
 import argparse
 import mimetypes
 import os
@@ -12,21 +16,28 @@ from lingua import Language, LanguageDetectorBuilder
 from openai import OpenAI
 
 PROJECT_ID = os.getenv("PROJECT_ID")
-MODEL = "gemini-2.5-pro-preview-05-06"
+GEMINI_MODEL = "gemini-2.5-pro-preview-05-06"
+OPENAI_MODEL = "gpt-4.5-preview"
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
 if OPENAI_API_KEY is None or OPENAI_API_KEY == "":
     raise ValueError("OPENAI_API_KEY is not set")
 
-gemini_client = genai.Client(
-    vertexai=True,
-    project=PROJECT_ID,
-    location="global",
-)
-# gemini_client = genai.Client(
-#     api_key=os.environ.get("GEMINI_API_KEY"),
-# )
+if GEMINI_API_KEY is None or GEMINI_API_KEY == "":
+    # Use Vertex AI API
+    gemini_client = genai.Client(
+        vertexai=True,
+        project=PROJECT_ID,
+        location="global",
+    )
+else:
+    # Use Gemini API
+    gemini_client = genai.Client(
+        api_key=os.environ.get("GEMINI_API_KEY"),
+    )
+
 openai_client = OpenAI(
     # This is the default and can be omitted
     api_key=OPENAI_API_KEY,
@@ -53,7 +64,7 @@ def generate_first_transcript(bytes_data: bytes, mime_type: str):
     )
     ret = ""
     for chunk in gemini_client.models.generate_content_stream(
-        model=MODEL,
+        model=GEMINI_MODEL,
         contents=contents,
         config=generate_content_config,
     ):
@@ -109,7 +120,7 @@ def translate_transcript_into_english(transcript: str):
     )
     ret = ""
     for chunk in gemini_client.models.generate_content_stream(
-        model=MODEL,
+        model=GEMINI_MODEL,
         contents=contents,
         config=generate_content_config,
     ):
@@ -120,7 +131,7 @@ def translate_transcript_into_english(transcript: str):
 
 def clean_transcript(transcript: str):
     response = openai_client.responses.create(
-        model="gpt-4.5-preview",
+        model=OPENAI_MODEL,
         input=transcript
         + (
             "\n\n---\n\n"
