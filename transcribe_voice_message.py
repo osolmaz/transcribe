@@ -1,5 +1,5 @@
 """
-Takes a voice message and transcribes it into text.
+Takes a voice message or text file and transcribes/processes it into a structured format.
 
 Why translate with Gemini 2.5 Pro and do the write-up with GPT-4.5?
 
@@ -155,37 +155,59 @@ def clean_transcript(transcript: str):
     return response.output_text
 
 
-def main(audio_file: str, output_file: str | None = None):
-    # If output_file is not provided, use the same name as the audio file
+def is_text_file(file_path: str) -> bool:
+    """Determine if a file is a text file based on extension or MIME type."""
+    # Check by extension first
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == '.txt':
+        return True
+
+    # Check by MIME type
+    mime_type, _ = mimetypes.guess_type(file_path)
+    return mime_type == 'text/plain'
+
+
+def main(input_file: str, output_file: str | None = None):
+    # If output_file is not provided, use the same name as the input file
     if output_file is None:
-        # Get the directory of the audio file
-        directory = os.path.dirname(audio_file)
+        # Get the directory of the input file
+        directory = os.path.dirname(input_file)
         # Get the base filename without extension
-        base_name = os.path.basename(audio_file)
+        base_name = os.path.basename(input_file)
         base_without_ext = os.path.splitext(base_name)[0]
         # Create output file path in the same directory as source file
         output_file = os.path.join(directory, base_without_ext + ".md")
 
+    # Check if the input is a text file
+    is_text = is_text_file(input_file)
+
     try:
-        # Detect MIME type from file extension
-        mime_type, _ = mimetypes.guess_type(audio_file)
-        if mime_type is None:
-            # Default to audio/mpeg if detection fails
-            mime_type = "audio/mpeg"
+        if is_text:
+            # For text files, read the content directly
+            print(f"Detected a text file: {input_file}")
+            with open(input_file, 'r') as f:
+                first_transcript = f.read()
+            print("Reading text content...")
+        else:
+            # For audio files, handle as before
+            mime_type, _ = mimetypes.guess_type(input_file)
+            if mime_type is None:
+                # Default to audio/mpeg if detection fails
+                mime_type = "audio/mpeg"
 
-        print(f"Detected MIME type: {mime_type}")
+            print(f"Detected MIME type: {mime_type}")
 
-        with open(audio_file, "rb") as f:
-            audio_bytes = f.read()
+            with open(input_file, "rb") as f:
+                audio_bytes = f.read()
+
+            print("Generating transcript...")
+            first_transcript = generate_first_transcript(audio_bytes, mime_type)
     except FileNotFoundError:
-        print(f"Error: File '{audio_file}' not found")
+        print(f"Error: File '{input_file}' not found")
         return
     except Exception as e:
         print(f"Error processing file: {e}")
         return
-
-    print("Generating transcript...")
-    first_transcript = generate_first_transcript(audio_bytes, mime_type)
 
     print("\nDetecting language using lingua-py...")
     detected_language = detect_language_with_lingua(first_transcript)
@@ -198,11 +220,13 @@ def main(audio_file: str, output_file: str | None = None):
         translated_transcript = translate_transcript_into_english(first_transcript)
         print("\nFinal transcript:")
         print(translated_transcript)
+        transcript_to_clean = translated_transcript
     else:
-        print("\nTranscript is already in English. No translation needed.")
+        print("\nContent is already in English. No translation needed.")
+        transcript_to_clean = first_transcript
 
     print("\nCleaning transcript...")
-    cleaned_transcript = clean_transcript(translated_transcript)
+    cleaned_transcript = clean_transcript(transcript_to_clean)
     print("\nFinal transcript:")
     print(cleaned_transcript)
 
@@ -237,11 +261,11 @@ def main(audio_file: str, output_file: str | None = None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Transcribe voice messages using Gemini API"
+        description="Process voice messages or text files using AI"
     )
     parser.add_argument(
-        "audio_file",
-        help="Path to the audio file (supports mp3, ogg, wav, etc.)",
+        "input_file",
+        help="Path to the audio file (mp3, ogg, wav) or text file (txt)",
     )
     parser.add_argument(
         "-o",
@@ -251,4 +275,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    main(args.audio_file, output_file=args.output_file)
+    main(args.input_file, output_file=args.output_file)
