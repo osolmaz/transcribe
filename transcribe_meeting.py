@@ -24,7 +24,12 @@ from lingua import Language, LanguageDetectorBuilder
 from openai import OpenAI
 from pydub import AudioSegment
 from pydub.silence import detect_nonsilent
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 dotenv.load_dotenv(".env")
 
@@ -62,49 +67,57 @@ def is_video_file(file_path: str) -> bool:
     """Determine if a file is a video file based on extension or MIME type."""
     # Check by extension first
     ext = os.path.splitext(file_path)[1].lower()
-    video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.flv', '.wmv']
+    video_extensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".flv", ".wmv"]
     if ext in video_extensions:
         return True
 
     # Check by MIME type
     mime_type, _ = mimetypes.guess_type(file_path)
-    return mime_type is not None and mime_type.startswith('video/')
+    return mime_type is not None and mime_type.startswith("video/")
 
 
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
     retry=retry_if_exception_type((subprocess.CalledProcessError,)),
-    before_sleep=lambda retry_state: print(f"\nRetrying audio conversion (attempt {retry_state.attempt_number})...")
+    before_sleep=lambda retry_state: print(
+        f"\nRetrying audio conversion (attempt {retry_state.attempt_number})..."
+    ),
 )
 def convert_to_mp3(input_path: str, output_path: str = None) -> str:
     """Convert any audio/video file to MP3 format."""
     if output_path is None:
-        temp_fd, output_path = tempfile.mkstemp(suffix='.mp3')
+        temp_fd, output_path = tempfile.mkstemp(suffix=".mp3")
         os.close(temp_fd)
-    
+
     try:
         cmd = [
-            'ffmpeg',
-            '-i', input_path,
-            '-vn',  # No video
-            '-acodec', 'mp3',
-            '-ab', '192k',
-            '-ar', '44100',
-            '-y',
-            output_path
+            "ffmpeg",
+            "-i",
+            input_path,
+            "-vn",  # No video
+            "-acodec",
+            "mp3",
+            "-ab",
+            "192k",
+            "-ar",
+            "44100",
+            "-y",
+            output_path,
         ]
-        
+
         subprocess.run(cmd, capture_output=True, text=True, check=True)
         return output_path
-        
+
     except subprocess.CalledProcessError as e:
         print(f"Error converting to MP3: {e}")
         print(f"FFmpeg stderr: {e.stderr}")
         raise
     except FileNotFoundError:
         print("FFmpeg not found. Please install FFmpeg.")
-        print("Install with: brew install ffmpeg (macOS) or apt-get install ffmpeg (Ubuntu)")
+        print(
+            "Install with: brew install ffmpeg (macOS) or apt-get install ffmpeg (Ubuntu)"
+        )
         raise
 
 
@@ -112,75 +125,88 @@ def extract_audio_from_video(video_path: str, output_path: str = None) -> str:
     """Extract audio from video file using FFmpeg."""
     if output_path is None:
         # Create a temporary file for the extracted audio
-        temp_fd, output_path = tempfile.mkstemp(suffix='.mp3')
+        temp_fd, output_path = tempfile.mkstemp(suffix=".mp3")
         os.close(temp_fd)  # Close the file descriptor, we just need the path
-    
+
     try:
         # Use FFmpeg to extract audio
         cmd = [
-            'ffmpeg',
-            '-i', video_path,
-            '-vn',  # No video
-            '-acodec', 'mp3',  # Audio codec
-            '-ab', '192k',  # Audio bitrate
-            '-ar', '44100',  # Audio sample rate
-            '-y',  # Overwrite output file if it exists
-            output_path
+            "ffmpeg",
+            "-i",
+            video_path,
+            "-vn",  # No video
+            "-acodec",
+            "mp3",  # Audio codec
+            "-ab",
+            "192k",  # Audio bitrate
+            "-ar",
+            "44100",  # Audio sample rate
+            "-y",  # Overwrite output file if it exists
+            output_path,
         ]
-        
+
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         print(f"Audio extracted successfully to: {output_path}")
         return output_path
-        
+
     except subprocess.CalledProcessError as e:
         print(f"Error extracting audio: {e}")
         print(f"FFmpeg stderr: {e.stderr}")
         raise
     except FileNotFoundError:
-        print("FFmpeg not found. Please install FFmpeg to extract audio from video files.")
-        print("Install with: brew install ffmpeg (macOS) or apt-get install ffmpeg (Ubuntu)")
+        print(
+            "FFmpeg not found. Please install FFmpeg to extract audio from video files."
+        )
+        print(
+            "Install with: brew install ffmpeg (macOS) or apt-get install ffmpeg (Ubuntu)"
+        )
         raise
 
 
-def chunk_audio_with_silence_detection(audio_path: str, chunk_duration_ms: int = 30 * 60 * 1000, 
-                                       min_silence_len: int = 1000, silence_thresh: int = -40) -> List[AudioSegment]:
+def chunk_audio_with_silence_detection(
+    audio_path: str,
+    chunk_duration_ms: int = 30 * 60 * 1000,
+    min_silence_len: int = 1000,
+    silence_thresh: int = -40,
+) -> List[AudioSegment]:
     """Split audio into chunks based on duration and silence detection.
-    
+
     Args:
         audio_path: Path to the audio file
         chunk_duration_ms: Target chunk duration in milliseconds (default 30 minutes)
         min_silence_len: Minimum length of silence to be considered (in ms)
         silence_thresh: Silence threshold in dBFS
-    
+
     Returns:
         List of AudioSegment chunks
     """
     audio = AudioSegment.from_file(audio_path)
     chunks = []
-    
+
     # If audio is shorter than chunk duration, return as single chunk
     if len(audio) <= chunk_duration_ms:
         return [audio]
-    
+
     start = 0
     while start < len(audio):
         # Define the ideal end point
         ideal_end = start + chunk_duration_ms
-        
+
         # If this would be the last chunk, take everything remaining
         if ideal_end >= len(audio):
             chunks.append(audio[start:])
             break
-        
+
         # Look for silence in a window around the ideal end point (±2 minutes)
         window_start = max(start, ideal_end - 2 * 60 * 1000)
         window_end = min(len(audio), ideal_end + 2 * 60 * 1000)
-        
+
         # Detect non-silent parts in the window
         window_audio = audio[window_start:window_end]
-        nonsilent_ranges = detect_nonsilent(window_audio, min_silence_len=min_silence_len, 
-                                           silence_thresh=silence_thresh)
-        
+        nonsilent_ranges = detect_nonsilent(
+            window_audio, min_silence_len=min_silence_len, silence_thresh=silence_thresh
+        )
+
         # Find the best split point (longest silence closest to ideal_end)
         best_split = ideal_end
         if nonsilent_ranges:
@@ -189,15 +215,15 @@ def chunk_audio_with_silence_detection(audio_path: str, chunk_duration_ms: int =
                 gap_start = window_start + nonsilent_ranges[i][1]
                 gap_end = window_start + nonsilent_ranges[i + 1][0]
                 gap_middle = (gap_start + gap_end) // 2
-                
+
                 # If this gap is closer to ideal_end, use it
                 if abs(gap_middle - ideal_end) < abs(best_split - ideal_end):
                     best_split = gap_middle
-        
+
         # Create the chunk
         chunks.append(audio[start:best_split])
         start = best_split
-    
+
     return chunks
 
 
@@ -205,11 +231,11 @@ def combine_audio_segments(segments: List[AudioSegment]) -> bytes:
     """Combine multiple audio segments into a single MP3 bytes object."""
     if not segments:
         return b""
-    
+
     combined = segments[0]
     for segment in segments[1:]:
         combined = combined + segment
-    
+
     # Export to bytes
     buffer = io.BytesIO()
     combined.export(buffer, format="mp3")
@@ -220,9 +246,16 @@ def combine_audio_segments(segments: List[AudioSegment]) -> bytes:
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=4, max=60),
     retry=retry_if_exception_type((Exception,)),
-    before_sleep=lambda retry_state: print(f"\nRetrying transcript generation (attempt {retry_state.attempt_number})...")
+    before_sleep=lambda retry_state: print(
+        f"\nRetrying transcript generation (attempt {retry_state.attempt_number})..."
+    ),
 )
-def generate_first_transcript(bytes_data: bytes, mime_type: str, has_speaker_samples: bool = False, custom_prompt: str = None):
+def generate_first_transcript(
+    bytes_data: bytes,
+    mime_type: str,
+    has_speaker_samples: bool = False,
+    custom_prompt: str = None,
+):
     if has_speaker_samples:
         prompt_text = (
             "This audio file begins with voice samples for speaker identification. "
@@ -249,11 +282,11 @@ def generate_first_transcript(bytes_data: bytes, mime_type: str, has_speaker_sam
             "If you can identify different speakers, please indicate them (e.g., Speaker 1, Speaker 2, etc.). "
             "Output just the transcript, and no other commentary."
         )
-    
+
     # Prepend custom prompt if provided
     if custom_prompt:
         prompt_text = custom_prompt + "\n\n" + prompt_text
-    
+
     contents = [
         types.Content(
             role="user",
@@ -310,7 +343,9 @@ def detect_language_with_lingua(text: str):
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=4, max=60),
     retry=retry_if_exception_type((Exception,)),
-    before_sleep=lambda retry_state: print(f"\nRetrying translation (attempt {retry_state.attempt_number})...")
+    before_sleep=lambda retry_state: print(
+        f"\nRetrying translation (attempt {retry_state.attempt_number})..."
+    ),
 )
 def translate_transcript_into_english(transcript: str):
     contents = [
@@ -344,7 +379,9 @@ def translate_transcript_into_english(transcript: str):
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=4, max=60),
     retry=retry_if_exception_type((Exception,)),
-    before_sleep=lambda retry_state: print(f"\nRetrying transcript cleaning (attempt {retry_state.attempt_number})...")
+    before_sleep=lambda retry_state: print(
+        f"\nRetrying transcript cleaning (attempt {retry_state.attempt_number})..."
+    ),
 )
 def clean_transcript(transcript: str):
     response = openai_client.responses.create(
@@ -373,53 +410,58 @@ def is_text_file(file_path: str) -> bool:
     """Determine if a file is a text file based on extension or MIME type."""
     # Check by extension first
     ext = os.path.splitext(file_path)[1].lower()
-    if ext == '.txt':
+    if ext == ".txt":
         return True
 
     # Check by MIME type
     mime_type, _ = mimetypes.guess_type(file_path)
-    return mime_type == 'text/plain'
+    return mime_type == "text/plain"
 
 
 def process_speaker_samples(speaker_sample_paths: List[str]) -> Optional[AudioSegment]:
     """Process and combine speaker samples into a single audio segment."""
     if not speaker_sample_paths:
         return None
-    
+
     combined_samples = None
-    
+
     for sample_path in speaker_sample_paths:
         if not os.path.exists(sample_path):
             print(f"Warning: Speaker sample file not found: {sample_path}")
             continue
-        
+
         # Convert to MP3 first
         temp_mp3 = None
         try:
             print(f"Processing speaker sample: {sample_path}")
             temp_mp3 = convert_to_mp3(sample_path)
-            
+
             # Load the audio
             sample_audio = AudioSegment.from_mp3(temp_mp3)
-            
+
             # Add 1 second of silence after each sample
             sample_with_silence = sample_audio + AudioSegment.silent(duration=1000)
-            
+
             if combined_samples is None:
                 combined_samples = sample_with_silence
             else:
                 combined_samples = combined_samples + sample_with_silence
-        
+
         finally:
             # Clean up temp file
             if temp_mp3 and os.path.exists(temp_mp3):
                 os.unlink(temp_mp3)
-    
+
     return combined_samples
 
 
-def main(input_file: str, output_file: str | None = None, speaker_samples: List[str] = None, 
-         chunk_duration: int = 30, custom_prompt: str = None):
+def main(
+    input_file: str,
+    output_file: str | None = None,
+    speaker_samples: List[str] = None,
+    chunk_duration: int = 30,
+    custom_prompt: str = None,
+):
     # If output_file is not provided, use the same name as the input file
     if output_file is None:
         # Get the directory of the input file
@@ -428,12 +470,14 @@ def main(input_file: str, output_file: str | None = None, speaker_samples: List[
         base_name = os.path.basename(input_file)
         base_without_ext = os.path.splitext(base_name)[0]
         # Create output file path in the same directory as source file
-        output_file = os.path.join(directory, base_without_ext + "_meeting_transcript.md")
+        output_file = os.path.join(
+            directory, base_without_ext + "_meeting_transcript.md"
+        )
 
     # Check if the input is a text file
     is_text = is_text_file(input_file)
     is_video = is_video_file(input_file)
-    
+
     temp_audio_file = None
     temp_files = []  # Track all temp files for cleanup
 
@@ -446,11 +490,10 @@ def main(input_file: str, output_file: str | None = None, speaker_samples: List[
             if speaker_audio:
                 print(f"Combined {len(speaker_samples)} speaker samples")
 
-
         if is_text:
             # For text files, read the content directly
             print(f"Detected a text file: {input_file}")
-            with open(input_file, 'r') as f:
+            with open(input_file, "r") as f:
                 first_transcript = f.read()
             print("Reading text content...")
         elif is_video:
@@ -458,43 +501,49 @@ def main(input_file: str, output_file: str | None = None, speaker_samples: List[
             print(f"Detected a video file: {input_file}")
             print("Extracting audio from video...")
             temp_audio_file = extract_audio_from_video(input_file)
-            
+
             # Now process the extracted audio
             with open(temp_audio_file, "rb") as f:
                 audio_bytes = f.read()
-            
+
             print("Generating transcript from extracted audio...")
-            
+
             # Convert to MP3 for consistency
             temp_mp3 = convert_to_mp3(temp_audio_file)
             temp_files.append(temp_mp3)
-            
+
             # Chunk the audio
             print(f"\nChunking audio into {chunk_duration}-minute segments...")
-            audio_chunks = chunk_audio_with_silence_detection(temp_mp3, 
-                                                             chunk_duration_ms=chunk_duration * 60 * 1000)
+            audio_chunks = chunk_audio_with_silence_detection(
+                temp_mp3, chunk_duration_ms=chunk_duration * 60 * 1000
+            )
             print(f"Created {len(audio_chunks)} chunks")
-            
+
             # Process each chunk
             all_transcripts = []
             for i, chunk in enumerate(audio_chunks):
-                print(f"\nProcessing chunk {i+1}/{len(audio_chunks)}...")
-                
+                print(f"\nProcessing chunk {i + 1}/{len(audio_chunks)}...")
+
                 # Combine speaker samples with chunk if available
                 if speaker_audio:
-                    combined_audio = speaker_audio + AudioSegment.silent(duration=2000) + chunk
+                    combined_audio = (
+                        speaker_audio + AudioSegment.silent(duration=2000) + chunk
+                    )
                 else:
                     combined_audio = chunk
-                
+
                 # Convert to bytes
                 chunk_bytes = combine_audio_segments([combined_audio])
-                
+
                 # Generate transcript for this chunk
-                chunk_transcript = generate_first_transcript(chunk_bytes, "audio/mp3", 
-                                                            has_speaker_samples=bool(speaker_audio),
-                                                            custom_prompt=custom_prompt)
+                chunk_transcript = generate_first_transcript(
+                    chunk_bytes,
+                    "audio/mp3",
+                    has_speaker_samples=bool(speaker_audio),
+                    custom_prompt=custom_prompt,
+                )
                 all_transcripts.append(chunk_transcript)
-            
+
             # Combine all transcripts
             first_transcript = "\n\n".join(all_transcripts)
         else:
@@ -513,32 +562,38 @@ def main(input_file: str, output_file: str | None = None, speaker_samples: List[
             print("Converting to MP3...")
             temp_mp3 = convert_to_mp3(input_file)
             temp_files.append(temp_mp3)
-            
+
             print(f"\nChunking audio into {chunk_duration}-minute segments...")
-            audio_chunks = chunk_audio_with_silence_detection(temp_mp3, 
-                                                             chunk_duration_ms=chunk_duration * 60 * 1000)
+            audio_chunks = chunk_audio_with_silence_detection(
+                temp_mp3, chunk_duration_ms=chunk_duration * 60 * 1000
+            )
             print(f"Created {len(audio_chunks)} chunks")
-            
+
             # Process each chunk
             all_transcripts = []
             for i, chunk in enumerate(audio_chunks):
-                print(f"\nProcessing chunk {i+1}/{len(audio_chunks)}...")
-                
+                print(f"\nProcessing chunk {i + 1}/{len(audio_chunks)}...")
+
                 # Combine speaker samples with chunk if available
                 if speaker_audio:
-                    combined_audio = speaker_audio + AudioSegment.silent(duration=2000) + chunk
+                    combined_audio = (
+                        speaker_audio + AudioSegment.silent(duration=2000) + chunk
+                    )
                 else:
                     combined_audio = chunk
-                
+
                 # Convert to bytes
                 chunk_bytes = combine_audio_segments([combined_audio])
-                
+
                 # Generate transcript for this chunk
-                chunk_transcript = generate_first_transcript(chunk_bytes, "audio/mp3", 
-                                                            has_speaker_samples=bool(speaker_audio),
-                                                            custom_prompt=custom_prompt)
+                chunk_transcript = generate_first_transcript(
+                    chunk_bytes,
+                    "audio/mp3",
+                    has_speaker_samples=bool(speaker_audio),
+                    custom_prompt=custom_prompt,
+                )
                 all_transcripts.append(chunk_transcript)
-            
+
             # Combine all transcripts
             first_transcript = "\n\n".join(all_transcripts)
     except FileNotFoundError:
@@ -552,7 +607,7 @@ def main(input_file: str, output_file: str | None = None, speaker_samples: List[
         if temp_audio_file and os.path.exists(temp_audio_file):
             os.unlink(temp_audio_file)
             print(f"Cleaned up temporary audio file: {temp_audio_file}")
-        
+
         # Clean up all other temp files
         for temp_file in temp_files:
             if os.path.exists(temp_file):
@@ -645,5 +700,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    main(args.input_file, output_file=args.output_file, speaker_samples=args.speaker_samples,
-         chunk_duration=args.chunk_duration, custom_prompt=args.prompt)
+    main(
+        args.input_file,
+        output_file=args.output_file,
+        speaker_samples=args.speaker_samples,
+        chunk_duration=args.chunk_duration,
+        custom_prompt=args.prompt,
+    )

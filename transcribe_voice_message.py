@@ -140,46 +140,54 @@ def is_video_file(file_path: str) -> bool:
     """Determine if a file is a video file based on extension or MIME type."""
     # Check by extension first
     ext = os.path.splitext(file_path)[1].lower()
-    video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.flv', '.wmv']
+    video_extensions = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v", ".flv", ".wmv"]
     if ext in video_extensions:
         return True
 
     # Check by MIME type
     mime_type, _ = mimetypes.guess_type(file_path)
-    return mime_type is not None and mime_type.startswith('video/')
+    return mime_type is not None and mime_type.startswith("video/")
 
 
 def extract_audio_from_video(video_path: str, output_path: str = None) -> str:
     """Extract audio from video file using FFmpeg."""
     if output_path is None:
         # Create a temporary file for the extracted audio
-        temp_fd, output_path = tempfile.mkstemp(suffix='.mp3')
+        temp_fd, output_path = tempfile.mkstemp(suffix=".mp3")
         os.close(temp_fd)  # Close the file descriptor, we just need the path
-    
+
     try:
         # Use FFmpeg to extract audio
         cmd = [
-            'ffmpeg',
-            '-i', video_path,
-            '-vn',  # No video
-            '-acodec', 'mp3',  # Audio codec
-            '-ab', '192k',  # Audio bitrate
-            '-ar', '44100',  # Audio sample rate
-            '-y',  # Overwrite output file if it exists
-            output_path
+            "ffmpeg",
+            "-i",
+            video_path,
+            "-vn",  # No video
+            "-acodec",
+            "mp3",  # Audio codec
+            "-ab",
+            "192k",  # Audio bitrate
+            "-ar",
+            "44100",  # Audio sample rate
+            "-y",  # Overwrite output file if it exists
+            output_path,
         ]
-        
+
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         print(f"Audio extracted successfully to: {output_path}")
         return output_path
-        
+
     except subprocess.CalledProcessError as e:
         print(f"Error extracting audio: {e}")
         print(f"FFmpeg stderr: {e.stderr}")
         raise
     except FileNotFoundError:
-        print("FFmpeg not found. Please install FFmpeg to extract audio from video files.")
-        print("Install with: brew install ffmpeg (macOS) or apt-get install ffmpeg (Ubuntu)")
+        print(
+            "FFmpeg not found. Please install FFmpeg to extract audio from video files."
+        )
+        print(
+            "Install with: brew install ffmpeg (macOS) or apt-get install ffmpeg (Ubuntu)"
+        )
         raise
 
 
@@ -208,12 +216,12 @@ def is_text_file(file_path: str) -> bool:
     """Determine if a file is a text file based on extension or MIME type."""
     # Check by extension first
     ext = os.path.splitext(file_path)[1].lower()
-    if ext == '.txt':
+    if ext == ".txt":
         return True
 
     # Check by MIME type
     mime_type, _ = mimetypes.guess_type(file_path)
-    return mime_type == 'text/plain'
+    return mime_type == "text/plain"
 
 
 def main(input_file: str, output_file: str | None = None):
@@ -230,14 +238,14 @@ def main(input_file: str, output_file: str | None = None):
     # Check if the input is a text file
     is_text = is_text_file(input_file)
     is_video = is_video_file(input_file)
-    
+
     temp_audio_file = None
 
     try:
         if is_text:
             # For text files, read the content directly
             print(f"Detected a text file: {input_file}")
-            with open(input_file, 'r') as f:
+            with open(input_file, "r") as f:
                 first_transcript = f.read()
             print("Reading text content...")
         elif is_video:
@@ -245,11 +253,11 @@ def main(input_file: str, output_file: str | None = None):
             print(f"Detected a video file: {input_file}")
             print("Extracting audio from video...")
             temp_audio_file = extract_audio_from_video(input_file)
-            
+
             # Now process the extracted audio
             with open(temp_audio_file, "rb") as f:
                 audio_bytes = f.read()
-            
+
             print("Generating transcript from extracted audio...")
             first_transcript = generate_first_transcript(audio_bytes, "audio/mp3")
         else:
