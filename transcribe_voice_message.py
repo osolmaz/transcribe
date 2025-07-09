@@ -10,6 +10,8 @@ and GPT-4.5 is the best model for doing write-ups.
 import argparse
 import mimetypes
 import os
+import subprocess
+import tempfile
 
 import dotenv
 from google import genai
@@ -134,6 +136,53 @@ def translate_transcript_into_english(transcript: str):
     return ret
 
 
+def is_video_file(file_path: str) -> bool:
+    """Determine if a file is a video file based on extension or MIME type."""
+    # Check by extension first
+    ext = os.path.splitext(file_path)[1].lower()
+    video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v', '.flv', '.wmv']
+    if ext in video_extensions:
+        return True
+
+    # Check by MIME type
+    mime_type, _ = mimetypes.guess_type(file_path)
+    return mime_type is not None and mime_type.startswith('video/')
+
+
+def extract_audio_from_video(video_path: str, output_path: str = None) -> str:
+    """Extract audio from video file using FFmpeg."""
+    if output_path is None:
+        # Create a temporary file for the extracted audio
+        temp_fd, output_path = tempfile.mkstemp(suffix='.mp3')
+        os.close(temp_fd)  # Close the file descriptor, we just need the path
+    
+    try:
+        # Use FFmpeg to extract audio
+        cmd = [
+            'ffmpeg',
+            '-i', video_path,
+            '-vn',  # No video
+            '-acodec', 'mp3',  # Audio codec
+            '-ab', '192k',  # Audio bitrate
+            '-ar', '44100',  # Audio sample rate
+            '-y',  # Overwrite output file if it exists
+            output_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        print(f"Audio extracted successfully to: {output_path}")
+        return output_path
+        
+    except subprocess.CalledProcessError as e:
+        print(f"Error extracting audio: {e}")
+        print(f"FFmpeg stderr: {e.stderr}")
+        raise
+    except FileNotFoundError:
+        print("FFmpeg not found. Please install FFmpeg to extract audio from video files.")
+        print("Install with: brew install ffmpeg (macOS) or apt-get install ffmpeg (Ubuntu)")
+        raise
+
+
 def clean_transcript(transcript: str):
     response = openai_client.responses.create(
         model=OPENAI_MODEL,
@@ -180,6 +229,9 @@ def main(input_file: str, output_file: str | None = None):
 
     # Check if the input is a text file
     is_text = is_text_file(input_file)
+    is_video = is_video_file(input_file)
+    
+    temp_audio_file = None
 
     try:
         if is_text:
@@ -188,6 +240,18 @@ def main(input_file: str, output_file: str | None = None):
             with open(input_file, 'r') as f:
                 first_transcript = f.read()
             print("Reading text content...")
+        elif is_video:
+            # For video files, extract audio first
+            print(f"Detected a video file: {input_file}")
+            print("Extracting audio from video...")
+            temp_audio_file = extract_audio_from_video(input_file)
+            
+            # Now process the extracted audio
+            with open(temp_audio_file, "rb") as f:
+                audio_bytes = f.read()
+            
+            print("Generating transcript from extracted audio...")
+            first_transcript = generate_first_transcript(audio_bytes, "audio/mp3")
         else:
             # For audio files, handle as before
             mime_type, _ = mimetypes.guess_type(input_file)
@@ -208,6 +272,11 @@ def main(input_file: str, output_file: str | None = None):
     except Exception as e:
         print(f"Error processing file: {e}")
         return
+    finally:
+        # Clean up temporary audio file if it was created
+        if temp_audio_file and os.path.exists(temp_audio_file):
+            os.unlink(temp_audio_file)
+            print(f"Cleaned up temporary audio file: {temp_audio_file}")
 
     print("\nDetecting language using lingua-py...")
     detected_language = detect_language_with_lingua(first_transcript)
@@ -265,7 +334,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "input_file",
-        help="Path to the audio file (mp3, ogg, wav) or text file (txt)",
+        help="Path to the audio file (mp3, ogg, wav), video file (mp4, mov, avi, etc.), or text file (txt)",
     )
     parser.add_argument(
         "-o",
