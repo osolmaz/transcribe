@@ -168,14 +168,16 @@ def chunk_audio_with_silence_detection(
     chunk_duration_ms: int = 30 * 60 * 1000,
     min_silence_len: int = 1000,
     silence_thresh: int = -40,
+    use_silence_detection: bool = False,
 ) -> List[AudioSegment]:
-    """Split audio into chunks based on duration and silence detection.
+    """Split audio into chunks based on duration and optionally silence detection.
 
     Args:
         audio_path: Path to the audio file
         chunk_duration_ms: Target chunk duration in milliseconds (default 30 minutes)
         min_silence_len: Minimum length of silence to be considered (in ms)
         silence_thresh: Silence threshold in dBFS
+        use_silence_detection: Whether to use silence detection for better chunk boundaries
 
     Returns:
         List of AudioSegment chunks
@@ -197,28 +199,33 @@ def chunk_audio_with_silence_detection(
             chunks.append(audio[start:])
             break
 
-        # Look for silence in a window around the ideal end point (±2 minutes)
-        window_start = max(start, ideal_end - 2 * 60 * 1000)
-        window_end = min(len(audio), ideal_end + 2 * 60 * 1000)
-
-        # Detect non-silent parts in the window
-        window_audio = audio[window_start:window_end]
-        nonsilent_ranges = detect_nonsilent(
-            window_audio, min_silence_len=min_silence_len, silence_thresh=silence_thresh
-        )
-
-        # Find the best split point (longest silence closest to ideal_end)
+        # Determine the best split point
         best_split = ideal_end
-        if nonsilent_ranges:
-            # Find gaps between nonsilent ranges
-            for i in range(len(nonsilent_ranges) - 1):
-                gap_start = window_start + nonsilent_ranges[i][1]
-                gap_end = window_start + nonsilent_ranges[i + 1][0]
-                gap_middle = (gap_start + gap_end) // 2
 
-                # If this gap is closer to ideal_end, use it
-                if abs(gap_middle - ideal_end) < abs(best_split - ideal_end):
-                    best_split = gap_middle
+        if use_silence_detection:
+            # Look for silence in a window around the ideal end point (±2 minutes)
+            window_start = max(start, ideal_end - 2 * 60 * 1000)
+            window_end = min(len(audio), ideal_end + 2 * 60 * 1000)
+
+            # Detect non-silent parts in the window
+            window_audio = audio[window_start:window_end]
+            nonsilent_ranges = detect_nonsilent(
+                window_audio,
+                min_silence_len=min_silence_len,
+                silence_thresh=silence_thresh,
+            )
+
+            # Find the best split point (longest silence closest to ideal_end)
+            if nonsilent_ranges:
+                # Find gaps between nonsilent ranges
+                for i in range(len(nonsilent_ranges) - 1):
+                    gap_start = window_start + nonsilent_ranges[i][1]
+                    gap_end = window_start + nonsilent_ranges[i + 1][0]
+                    gap_middle = (gap_start + gap_end) // 2
+
+                    # If this gap is closer to ideal_end, use it
+                    if abs(gap_middle - ideal_end) < abs(best_split - ideal_end):
+                        best_split = gap_middle
 
         # Create the chunk
         chunks.append(audio[start:best_split])
@@ -461,6 +468,7 @@ def main(
     speaker_samples: List[str] = None,
     chunk_duration: int = 30,
     custom_prompt: str = None,
+    use_silence_detection: bool = False,
 ):
     # If output_file is not provided, use the same name as the input file
     if output_file is None:
@@ -515,7 +523,9 @@ def main(
             # Chunk the audio
             print(f"\nChunking audio into {chunk_duration}-minute segments...")
             audio_chunks = chunk_audio_with_silence_detection(
-                temp_mp3, chunk_duration_ms=chunk_duration * 60 * 1000
+                temp_mp3,
+                chunk_duration_ms=chunk_duration * 60 * 1000,
+                use_silence_detection=use_silence_detection,
             )
             print(f"Created {len(audio_chunks)} chunks")
 
@@ -565,7 +575,9 @@ def main(
 
             print(f"\nChunking audio into {chunk_duration}-minute segments...")
             audio_chunks = chunk_audio_with_silence_detection(
-                temp_mp3, chunk_duration_ms=chunk_duration * 60 * 1000
+                temp_mp3,
+                chunk_duration_ms=chunk_duration * 60 * 1000,
+                use_silence_detection=use_silence_detection,
             )
             print(f"Created {len(audio_chunks)} chunks")
 
@@ -698,6 +710,11 @@ if __name__ == "__main__":
         help="Custom prompt to prepend to the transcription instructions",
         default=None,
     )
+    parser.add_argument(
+        "--use-silence-detection",
+        action="store_true",
+        help="Enable silence detection for better chunk boundaries (disabled by default)",
+    )
     args = parser.parse_args()
 
     main(
@@ -706,4 +723,5 @@ if __name__ == "__main__":
         speaker_samples=args.speaker_samples,
         chunk_duration=args.chunk_duration,
         custom_prompt=args.prompt,
+        use_silence_detection=args.use_silence_detection,
     )
